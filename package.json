@@ -1,0 +1,23 @@
+{
+  "name": "kitten-game",
+  "version": "1.0.0",
+  "description": "A Three.js-based interactive kitten game",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",        // Run local development server
+    "build": "vite build", // Build for production
+    "preview": "vite preview", // Preview build output locally
+    "deploy": "git subtree push --prefix dist origin gh-pages" // Deploy to GitHub Pages
+  },
+  "keywords": ["three.js", "game", "kitten"],
+  "author": "Kevin",
+  "license": "MIT",
+  "dependencies": {
+    "@tweenjs/tween.js": "^25.0.0",
+    "howler": "^2.2.4",
+    "three": "^0.173.0"
+  },
+  "devDependencies": {
+    "vite": "^6.1.0"
+  }
+}

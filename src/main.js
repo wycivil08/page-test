@@ -14,18 +14,18 @@ class KittenGame {
         this.setupSound();
         this.setupFullscreen();  // <-- Ensure fullscreen is set up
         this.initializeGame();
-        
+
         window.addEventListener('beforeunload', () => this.cleanup());
     }
 
     // Add this method to the KittenGame class
     setupFullscreen() {
         const fullscreenBtn = document.getElementById('fullscreen-btn');
-        
+
         // Only show button if fullscreen is available
-        if (!document.fullscreenEnabled && 
-            !document.webkitFullscreenEnabled && 
-            !document.mozFullScreenEnabled && 
+        if (!document.fullscreenEnabled &&
+            !document.webkitFullscreenEnabled &&
+            !document.mozFullScreenEnabled &&
             !document.msFullscreenEnabled) {
             fullscreenBtn.style.display = 'none';
             return;
@@ -33,7 +33,7 @@ class KittenGame {
 
         fullscreenBtn.addEventListener('click', () => {
             const container = document.getElementById('game-container');
-            
+
             try {
                 if (container.requestFullscreen) {
                     container.requestFullscreen();
@@ -51,13 +51,13 @@ class KittenGame {
 
         // Handle fullscreen change events
         const fullscreenChangeHandler = () => {
-            const isFullscreen = document.fullscreenElement || 
-                               document.webkitFullscreenElement || 
-                               document.mozFullScreenElement || 
-                               document.msFullscreenElement;
-            
+            const isFullscreen = document.fullscreenElement ||
+                document.webkitFullscreenElement ||
+                document.mozFullScreenElement ||
+                document.msFullscreenElement;
+
             fullscreenBtn.style.display = isFullscreen ? 'none' : 'block';
-            
+
             // Trigger resize event to update game bounds
             window.dispatchEvent(new Event('resize'));
         };
@@ -73,7 +73,7 @@ class KittenGame {
         const aspect = window.innerWidth / window.innerHeight;
         const verticalSize = 5;
         const horizontalSize = verticalSize * aspect;
-        
+
         this.bounds = {
             left: -horizontalSize,
             right: horizontalSize,
@@ -146,28 +146,51 @@ class KittenGame {
     }
 
     setupSound() {
-        this.sounds = {
-            movement: new Howl({
-                src: ['/sounds/movement.mp3'],
-                loop: true,
-                volume: 0.5
-            }),
-            pop: new Howl({
-                src: ['/sounds/pop.wav'],
-                volume: 0.8
-            })
-        };
+        const useCDN = import.meta.env.MODE === 'production';
+        const baseURL = useCDN
+            ? 'https://cdn.jsdelivr.net/gh/wycivil08/page-test@gh-pages/sounds/'
+            : `${import.meta.env.BASE_URL}sounds/`;
+
+        return new Promise((resolve) => {
+            let loadedCount = 0;
+            const totalSounds = 2; // Number of sounds to load
+
+            this.sounds = {
+                movement: new Howl({
+                    src: [`${baseURL}movement.mp3`],
+                    loop: true,
+                    volume: 0.5,
+                    onload: () => {
+                        loadedCount++;
+                        if (loadedCount === totalSounds) resolve();
+                    },
+                    onend: () => {
+                        this.sounds.movement.isPlaying = false;
+                    }
+                }),
+                pop: new Howl({
+                    src: [`${baseURL}pop.wav`],
+                    volume: 0.8,
+                    onload: () => {
+                        loadedCount++;
+                        if (loadedCount === totalSounds) resolve();
+                    }
+                })
+            };
+
+            this.sounds.movement.isPlaying = false;
+        });
     }
 
     async createAnimalInstance() {
         const animal = await this.createAnimalWithShader();
         animal.scale.set(0.02, 0.02, 0.02);
-        
+
         // Choose a random side (0: top, 1: right, 2: bottom, 3: left)
         const side = Math.floor(Math.random() * 4);
         let x, z, directionX, directionY;
-        
-        switch(side) {
+
+        switch (side) {
             case 0: // Top
                 x = THREE.MathUtils.randFloat(this.bounds.left * 0.8, this.bounds.right * 0.8);
                 z = this.bounds.top;
@@ -193,11 +216,12 @@ class KittenGame {
                 directionY = Math.random() - 0.5;
                 break;
         }
-        
+
         animal.position.set(x, 0, z);
         this.scene.add(animal);
-    
-        return {
+
+        // Create animal object with movement state
+        const animalObj = {
             mesh: animal,
             direction: new THREE.Vector2(directionX, directionY).normalize(),
             speed: 0.01 + Math.random() * 0.01,
@@ -206,15 +230,34 @@ class KittenGame {
             stateTimer: Math.random() * 4 + 1,
             lastPosition: new THREE.Vector3(x, 0, z)
         };
+
+        // Initialize sound when spawning since we're in MOVING state
+        if (!this.sounds.movement.isPlaying) {
+            this.sounds.movement.play();
+            this.sounds.movement.isPlaying = true;
+        }
+
+        return animalObj;
     }
 
     async createAnimalWithShader() {
         const group = new THREE.Group();
         const loader = new GLTFLoader();
-        
+
+        // const modelUrl = `${import.meta.env.BASE_URL}models/fish_animated.glb`;
+        // use cdn for mainland china users
+        const useCDN = import.meta.env.MODE === 'production';
+        const modelUrl = useCDN
+            ? 'https://cdn.jsdelivr.net/gh/wycivil08/page-test@gh-pages/models/fish_animated.glb'
+            : `${import.meta.env.BASE_URL}models/fish_animated.glb`;
+
+        const model = await loader.loadAsync(modelUrl);
+
         try {
-            const model = await loader.loadAsync('/models/fish_animated.glb');
-            
+
+            // const model = await loader.loadAsync('/models/fish_animated.glb');
+            const model = await loader.loadAsync(modelUrl);
+
             // Enhanced emissive material for the entire fish
             model.scene.traverse((child) => {
                 if (child.isMesh) {
@@ -275,7 +318,7 @@ class KittenGame {
             group.add(model.scene);
             group.userData.mixer = mixer;
             this.mixers.push(mixer);
-            
+
         } catch (error) {
             console.error('Error loading model:', error);
             // Fallback object
@@ -292,6 +335,7 @@ class KittenGame {
         return group;
     }
 
+    // Replace the updateAnimalState method with this improved version:
     updateAnimalState(animal) {
         animal.stateTimer -= 0.016;
 
@@ -301,30 +345,28 @@ class KittenGame {
         if (animal.stateTimer <= 0) {
             switch (animal.state) {
                 case this.movementStates.MOVING:
-                    animal.state = Math.random() < 0.7 ? 
-                        this.movementStates.PAUSED : 
+                    animal.state = Math.random() < 0.3 ?
+                        this.movementStates.PAUSED :
                         this.movementStates.TURNING;
                     animal.stateTimer = Math.random() * 2 + 1;
-                    
+
                     if (animal.state === this.movementStates.PAUSED) {
-                        this.sounds.movement.pause();
-                        // Pause animation
+                        // Animation handling
                         if (animal.mesh.userData.mixer) {
                             animal.mesh.userData.mixer.timeScale = 0;
                         }
                     }
                     break;
-                
+
                 case this.movementStates.PAUSED:
                     animal.state = this.movementStates.MOVING;
                     animal.stateTimer = Math.random() * 2 + 1;
-                    this.sounds.movement.play();
                     // Resume animation
                     if (animal.mesh.userData.mixer) {
                         animal.mesh.userData.mixer.timeScale = 1;
                     }
                     break;
-                
+
                 case this.movementStates.TURNING:
                     animal.state = this.movementStates.MOVING;
                     animal.stateTimer = Math.random() * 4 + 1;
@@ -352,36 +394,63 @@ class KittenGame {
                 break;
         }
 
+        // Sound management based on actual movement
+        if (animal.speed > 0) {
+            if (!this.sounds.movement.isPlaying) {
+                this.sounds.movement.play();
+                this.sounds.movement.isPlaying = true;
+            }
+        } else {
+            if (this.sounds.movement.isPlaying) {
+                this.sounds.movement.pause();
+                this.sounds.movement.isPlaying = false;
+            }
+        }
+
         // Update position
         const newX = animal.mesh.position.x + animal.direction.x * animal.speed;
         const newZ = animal.mesh.position.z + animal.direction.y * animal.speed;
 
         // Boundary checks with smooth transition
         const boundaryMargin = 0.1;
+        let directionChanged = false;
+
         if (newX > this.bounds.right * (1 - boundaryMargin)) {
             animal.direction.x = -Math.abs(animal.direction.x);
+            directionChanged = true;
         } else if (newX < this.bounds.left * (1 - boundaryMargin)) {
             animal.direction.x = Math.abs(animal.direction.x);
+            directionChanged = true;
         }
-        
+
         if (newZ > this.bounds.top * (1 - boundaryMargin)) {
             animal.direction.y = -Math.abs(animal.direction.y);
+            directionChanged = true;
         } else if (newZ < this.bounds.bottom * (1 - boundaryMargin)) {
             animal.direction.y = Math.abs(animal.direction.y);
+            directionChanged = true;
         }
 
         // Apply movement
         animal.mesh.position.x += animal.direction.x * animal.speed;
         animal.mesh.position.z += animal.direction.y * animal.speed;
-        
+
         // Update rotation
         animal.mesh.rotation.y = Math.atan2(animal.direction.x, animal.direction.y);
+
+        // Additional check: If no actual movement occurred but sound is playing, stop it
+        if (Math.abs(animal.mesh.position.x - animal.lastPosition.x) < 0.0001 &&
+            Math.abs(animal.mesh.position.z - animal.lastPosition.z) < 0.0001) {
+            if (this.sounds.movement.isPlaying) {
+                this.sounds.movement.pause();
+                this.sounds.movement.isPlaying = false;
+            }
+        }
 
         // Update glow intensity for the glowing meshes
         if (animal.mesh.children) {
             animal.mesh.children.forEach(child => {
                 if (child.material && child.material.type === 'ShaderMaterial') {
-                    // Only update shader uniforms if they exist
                     if (child.material.uniforms && child.material.uniforms.glowColor) {
                         const pulseIntensity = 0.2 * Math.sin(performance.now() * 0.002) + 1;
                         child.material.uniforms.glowColor.value.multiplyScalar(pulseIntensity);
@@ -398,11 +467,18 @@ class KittenGame {
     }
 
     async initializeGame() {
-        await this.createAnimals();
+        await this.setupSound();  // Ensure sounds are ready
+        await this.createAnimals(); // Ensure models are ready
         this.animate();
     }
 
     async createAnimals() {
+        // Stop any existing movement sound before creating new animals
+        if (this.sounds.movement.isPlaying) {
+            this.sounds.movement.stop();
+            this.sounds.movement.isPlaying = false;
+        }
+
         while (this.animals.length < this.maxAnimals) {
             const animal = await this.createAnimalInstance();
             this.animals.push(animal);
@@ -422,13 +498,13 @@ class KittenGame {
 
     onPointerDown(event) {
         event.preventDefault();
-        
+
         const rect = this.renderer.domElement.getBoundingClientRect();
         this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-        
+
         this.raycaster.setFromCamera(this.mouse, this.camera);
-        
+
         const meshesToCheck = this.animals.reduce((acc, animal) => {
             acc.push(animal.mesh);
             animal.mesh.traverse((child) => {
@@ -438,14 +514,14 @@ class KittenGame {
             });
             return acc;
         }, []);
-        
+
         const intersects = this.raycaster.intersectObjects(meshesToCheck, false);
-        
+
         if (intersects.length > 0) {
             const hitObject = intersects[0].object;
             let currentObject = hitObject;
             let foundAnimal = null;
-            
+
             while (currentObject && !foundAnimal) {
                 const animal = this.animals.find(a => a.mesh === currentObject);
                 if (animal) {
@@ -454,11 +530,11 @@ class KittenGame {
                 }
                 currentObject = currentObject.parent;
             }
-            
+
             if (foundAnimal) {
                 this.sounds.pop.play();
                 this.sounds.movement.pause();
-                
+
                 new TWEEN.Tween(foundAnimal.mesh.scale)
                     .to({ x: 0, y: 0, z: 0 }, 500)
                     .easing(TWEEN.Easing.Quadratic.Out)
@@ -514,27 +590,30 @@ class KittenGame {
 
     animate() {
         if (!this.running) return;
-        
+
         requestAnimationFrame(() => this.animate());
-        
+
         const delta = this.clock.getDelta();
-        
+
         // Update TWEEN
         TWEEN.update();
-        
+
         // Update animation mixers
         this.mixers.forEach(mixer => mixer.update(delta));
-        
+
         // Update animals
         this.updateAnimals();
-        
+
         // Use composer instead of renderer for post-processing effects
         this.composer.render();
     }
 
     cleanup() {
         this.running = false;
-        this.sounds.movement.stop();
+        if (this.sounds.movement.isPlaying) {
+            this.sounds.movement.stop();
+            this.sounds.movement.isPlaying = false;
+        }
         this.animals.forEach(animal => {
             this.scene.remove(animal.mesh);
         });

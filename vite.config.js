@@ -1,10 +1,9 @@
-// vite.config.js
 import { defineConfig } from 'vite';
 
 export default defineConfig(({ mode }) => ({
   base: mode === 'production' 
-    ? (process.env.GITEE ? '/kitten-game-gitee/' : '/page-test/')  // GitHub vs Gitee
-    : './',
+    ? (process.env.CF_PAGES ? '/' : '/page-test/')  // Cloudflare Pages ('/') vs GitHub Pages ('/page-test/')
+    : './',  // Local deployment
   build: {
     outDir: '../dist',
     emptyOutDir: true,
